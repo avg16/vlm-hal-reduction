@@ -94,4 +94,53 @@ class CounterFactualGenerator(nn.Module):
 
             logits_cf=fusion_fn(e_v_cf,e_q_cf)
             log_probs=F.log_softmax(logits_cf,dim=-1)
-            
+
+            log_p_correct=log_prob.gather(
+                1,answer_idx.unsqueeze(1)
+               ).squeeze(1)
+
+
+
+            u_norm_sq=(u_v**2).mean() + (u_q**2).mean()
+            loss=-u_norm_sq + self.lambda_cf*log_p_correct.mean()
+
+            loss.backward()
+            optimizer.step()
+
+            with torch.no_grad():
+                if self.intervene_vision:
+                    u_v.clamp(0.0,1.0-1e-6)
+                
+                if self.intervene_language:
+                    u_q.clamp(0.0,1.0-1e-6)
+
+
+        return u_v.detach(),u_q.detach()
+
+
+    
+    def generate(
+        self,
+        e_v: torch.Tensor,
+        e_q: torch.Tensor,
+        e_v_rand: torch.Tensor,
+        e_q_rand: torch.Tensor,
+        u_v: torch.Tensor,
+        u_q: torch.Tensor,
+    ) -> Tuple[torch.Tensor,torch.Tensor]:
+
+
+
+        e_v_cf=e_v
+        e_q_cf=e_q
+
+
+
+        if self.intervene_vision:
+            e_v_cf=self.interpolate_embeddings(e_v,e_v_rand,u_v)
+
+        if self.intervene_language:
+            e_q_cf=self.intervene_embeddings(e_q,e_q_rand,u_q)
+
+        
+        return e_v_cf,e_q_cf
