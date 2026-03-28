@@ -219,6 +219,136 @@ def _merge_input_ids_with_image_features(
             merged_list.append(inputs_embeds[b])
             continue
 
+
+        pos=img_positions[0].item()
+        before=inputs_embed[b,:pos]
+        img_emb=image_features[b]
+        after=inputs_embeds[b,pos+1:]
+        merged_list.append(torch.cat([before,img_emb,after],dim=0))
+
+
+    max_len=max(t.size(0) for t in merged_list)
+    padded=inputs_embeds.new_zeros(B,max_len,D)
+    for b ,t in enumerate(merged_list):
+        padded[b,:t.size(0)]=t
+    return padded
+
+
+
+def factual_forward(
+    self,
+    input_ids: torch.Tensor,
+    attention_ask: torch.Tensor,
+    pixel_values: torch Tensor,
+
+) -> Tuple[torch.Tnesor,torch.Tensor,torch,Tensor]:
+
+
+
+
+    image_features=self._extract_vision_embeddings(pixel_values)
+    text_embeds=self._extract_language_embeddings(input_ids)
+
+    last_hidden=self._merge_embeddings_and_forward(
+        iamge_features,input_ids,attention_mask,text_embeds
+    )
+
+
+    logits=self.vqa_head(last_hidden)
+    return logits,image_features,tex_embeds
+
+
+def counterfactual_forward(
+    self,
+    input_ids:torch.Tensor,
+    attention_mask: torch.Tensor,
+    pixel_values: torch.Tensor,
+    answer_idx:torch.Tensor,
+    image_features: Optional[torch.Tensor]=None,
+    text_embeds: Optional[torch.Tnesor]=None,
+    rand_iamge_features: Optional[torch.Tnesor]=None,
+    rand_text_embeds: Optional[torch.Tnesor]=None,
+
+)-> Tuple[torch.Tensor,torch.Tensor]:
+
+    B=input_ids.size(0)
+    deive=input_ids.device
+
+
+    if image_features is None:
+        image_features=self._extract_vision_embeddings(pixel_values)
+    if text_embeds is None:
+        text_embeds=self._extract_language_embeddings(input_ids)
+
+
+    if rand_image_features is None:
+        rand_idx=torch.roll(torch.arange(B),shifts=1)
+        rand_image_features=image_features[rand_idx].detach()
+
+    if rand_text_embeds is None:
+        rand_idx=torch.roll(torch.arange(B),shifts=1)
+        rand_text_embeds=text_embeds[rand_idx].detach()
+
+
+    e_v_pool=image_features.mean(dim=1)
+    e_q_pool=text_embeds.mean(dim=1)
+    e_v_rand_pool=rand_iamge_features.mean(dim=1)
+    e_q_rand_pool=rand_text_embeds.mean(dim=1)
+
+    u_v, u_q =self.exogenous_module(B,device)
+
+
+    def fusion_fn(e_v:torch.Tensor, e_q: torch.Tensor) -> otrch.Tensor:
+        fused=(e_v+e_q)/2.0
+
+
+
+
+    u_v_opt,u_q_opt=self.cf_generator.optimize_u_for_intervention(
+        e_v=e_v_pool,
+        e_q=e_q_pool,
+        e_v_rand=e_v_rand_pool,
+        e_q_rand=e_q_rand_pool,
+        u_v_init=u_v,
+        u_q_init=u_q,
+
+        answer_idx=answer_idx,
+        fusion_fn=fusion_fn,
+    )
+
+
+    u_v_seq=u_v_opt.view(B,1,1)
+    u_q_seq=u_q_opt.view(B,1,1)
+
+    threshold=1.0-self.cf_generator.epsilon
+
+    factual_v=(u_v_opt>=threshold).view(B,1,1).float()
+    factual_q=(u_q_opt>=threshold).view(B,1,1).float()
+
+    img_feat_cf=(
+        factual_v*image_feautres+(1.0-factual_v)*(u_v_seq*image_features+(1.0-u_v_seq)*rand_image_features)
+    )
+
+    text_emb=cf=(
+        factual_q*text_embeds+(1.0-factual_q)*(u_q_seq*text_embeds+(1.0-u_q_seq)*rand_text-embeds)
+    )
+
+
+
+    
+
+
+
+
+
+
+
+
+    
+
+
+
+
         
 
 
