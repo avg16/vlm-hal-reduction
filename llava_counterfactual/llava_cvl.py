@@ -98,5 +98,139 @@ class LLaVACVL(nn.Module):
             clip_M=clip_M,
             intervene_vision=intervene_vision,
             intervene_language=intervene_language,
-            
+
         )
+
+        self.clip_M=clip_M
+        self.num_answers=num_answers
+
+
+    def _etract_vsion_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+
+    ) -> torch.Tensor:
+
+
+    image_outputs=self.llava.vision_tower(
+        pixel_values,
+        output_hidden_states=True,
+
+    )
+
+    selected_image_feature=image_outputs.hidden_states[
+        self.llava.config.vision_feature_layer
+    ]
+
+
+    if self.llava.config.vision_feature_select_strategy=='default':
+        selected_image_feature=selected_image_feature[:,1:]
+    elif self.llava.config.vision_feature_select_strategy=='full':
+        selected_image_feature=selected_iamge_feature
+
+    
+    image_features=self.llava.multi_modal_projector(selected_image_feature)
+    return image_features
+
+
+def _extract_language_embeddings(
+    self,
+    input_ids: torch.Tensor,
+
+) -> torch.Tensor:
+
+
+    lm=self.llava.language_model
+    if hasaatr(lm,"base_model"):
+        embed_fn=lm.base_model.model.embed_tokens
+
+    else:
+        embed_fn=lm.model.embed_tokens
+
+    return embed_fn(input_ids)
+
+
+def _merge_embeddings_and_forward(
+    self,
+    image_features: torch.Tensor,
+    input_ids: torch.Tensor,
+    attention_mask: torch.Tensor,
+    text_embeds : Optional[torch.Tensor]=None,
+
+) -> torch.Tensor:
+
+
+
+    if text_embeds is None:
+        text_embeds=self.extract_language_embeddings(input_ids)
+
+    image_token_index=self.llava.config.image_toekn_index
+
+
+    mreged_embeds=self._merge_input_ids_with_image_features(
+        image_features,text_embeds,input_ids,image_token_index
+    )
+
+
+    lm=self.llava.languge_model
+    outputs=lm(
+        input_embeds=merged_embeds,
+        attention_mask=attention_mask,
+        output_hidden_states=False,
+        return_dict=True,
+    )
+
+
+
+    hidden_states=outputs.last_hidden_state
+
+    seq_legths=attention_mask.sum(dim=1)-1
+    batch_size=hidden_states.size(0)
+    last_hidde=hidden_state[
+        torch.arrange(batch_size,device=hidden_states.device),
+        seq_legths.clamp(0,hidden_states.size(1)-1)
+
+    ]
+
+    return last_hidden
+
+
+
+def _merge_input_ids_with_image_features(
+    self,
+    image_features:torch.Tensor,
+    input_embeds:torch.Tensor,
+    input_ids: torch.Tensor,
+    image_toekn_index: int,
+) -> torch.Tensor:
+
+    B,L,D= inputs_embeds.shape
+    num_patches=image_features.size(1)
+
+
+
+    merged_list=[]
+    for b in range(B):
+         ids=input_ids[b]
+         img_positions=(ids==image_token_index).nonzero(as_tuple=True)[0]
+
+         if len(img_positions)==0:
+
+            merged_list.append(inputs_embeds[b])
+            continue
+
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
